@@ -5,10 +5,13 @@ from detect import Detector
 from align import detect_face
 import cv2
 import argparse
+import queue
 import os
 import threading
+import pandas as pd
 from os import listdir
 from os.path import isfile, join
+
 
 #disabling tensorflow logs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
@@ -30,9 +33,12 @@ sess=0
 pnet=0
 rnet=0
 onet=0
+flag=0
+facename=[]
+count=[]
 class Recognition:
     
-    def initialise(self,filename):
+    def initialise(self,filename,q):
         # some constants kept as default from facenet
         global pnet,rnet,onet,threshold,factor,minsize,margin,sess,images_placeholder,phase_train_placeholder,embedding_size,embeddings
         sess = tf.Session()
@@ -41,7 +47,7 @@ class Recognition:
         pnet, rnet, onet = detect_face.create_mtcnn(sess, 'align')
 
         # read 20170512-110547 model file downloaded from https://drive.google.com/file/d/0B5MzpY9kBtDVZ2RpVDYwWmxoSUk
-        facenet.load_model("20170512-110547/20170512-110547.pb")
+        facenet.load_model("20170512-110547.pb")
 
         # Get input and output tensors
         images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -49,7 +55,7 @@ class Recognition:
         phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
         embedding_size = embeddings.get_shape()[1]
         obj=Recognition
-        obj.printResults(self,filename)
+        obj.printResults(self,filename,q)
 
     def getFace(self,img):
         obj=Recognition()
@@ -91,9 +97,15 @@ class Recognition:
             dist = np.sqrt(np.sum(np.square(np.subtract(face1[0]['embedding'], face2[0]['embedding']))))
             return dist
         return -1
-
-    def printResults(self,filename):
+    def make_csv(self):
+        onlyfiles = [f for f in listdir("images") if isfile(join("images", f))]
+        for f in onlyfiles:
+            count.append(0)
+    def printResults(self,filename,q):
+        data=[]
+        global flag
         obj=Recognition()
+        facename=q.get()
         # print("inside print")
         onlyfiles = [f for f in listdir("images") if isfile(join("images", f))]
         img1 = cv2.imread("image.jpg")
@@ -102,6 +114,7 @@ class Recognition:
         for f in onlyfiles:
             # print(f)
             img2 = cv2.imread("images/"+str(f))
+            data.append(str(f[:-4]))
             distance = obj.compare2face(img1, img2)
             threshold = 1.0    # set yourself to meet your requirement
             # print("distance = "+str(distance) ,"to ",str(f[:-4]))
@@ -109,6 +122,26 @@ class Recognition:
             if distance<=threshold and distance != -1 and distance< min:
                 min=distance
                 f1=f
+        if (not(f1=="Not identified.jpg")):
+            if(not(str(f1[:-4]) in facename)):
+                print("entered ")
+                facename.append(str(f1[:-4]));
+                print("face"+str(f1[:-4])+str(facename));
+                count[data.index(str(f1[:-4]))]=count[data.index(str(f1[:-4]))]+1
+            else:
+                print("this is a")
+                if(flag==5):
+                    flag=0;
+                    facename=[]
+                flag=flag+1;
+            print(flag)
+            print(facename)
+            print(len(data))
+            print(len(count))
+            df={'names':data,'count':count};
+            df=pd.DataFrame(df)
+            df.to_csv('attendence.csv')
+        q.put(facename)
         print("Face recognised",str(f1[:-4]))
         cv2.rectangle(img1,(0,img1.shape[0]),(img1.shape[1],0),(0,255,0),3)
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -118,14 +151,17 @@ class Recognition:
                 # return [1,str(f[:-4])]
     
         # return [0,""]
-
-obj2=Detector()
-# obj2.detection()
+q=queue.Queue()
+facename=[]
+q.put(facename)
 obj1=Recognition()
-obj1.initialise("")
+obj1.make_csv()
+obj2=Detector()
+#obj2.detection()
+obj1.initialise("",q)
 while True:
     t1 = threading.Thread(target=obj2.detection())
-    t2 = threading.Thread(target=obj1.printResults(""))
+    t2 = threading.Thread(target=obj1.printResults("",q))
     t1.start()
     t2.start()
     t1.join()
@@ -139,4 +175,3 @@ while True:
 #     if result==1:
 #         print("Face Recognised ",name)
 #     # obj2.detection()
-    
