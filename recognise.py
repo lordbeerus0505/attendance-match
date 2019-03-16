@@ -140,7 +140,7 @@ class Recognition:
             print(len(count))
             df={'names':data,'count':count};
             df=pd.DataFrame(df)
-            df.to_csv('attendence.csv')
+            df.to_csv('attendance.csv')
         q.put(facename)
         print("Face recognised",str(f1[:-4]))
         cv2.rectangle(img1,(0,img1.shape[0]),(img1.shape[1],0),(0,255,0),3)
